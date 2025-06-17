@@ -2,8 +2,14 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="autoplay-media=* 'unsafe-inline'">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <!-- Removed Content-Security-Policy as it might restrict audio autoplay -->
+    
+    <!-- Mobile Specific Metas -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#000000">
     
     <!-- SEO Meta Tags -->
     <meta name="description" content="Meih - Beautiful footage of a baby deer in its natural habitat. Watch this adorable baby deer (meih) in fullscreen high-definition video.">
@@ -21,10 +27,46 @@
     
     <title>Meih - Baby Deer Video Experience</title>
     <link rel="stylesheet" href="styles.css">
+    
+    <!-- Inline critical script to force audio to play before DOM is ready -->
+    <script>
+        // Immediate execution to try to unmute as early as possible
+        (function() {
+            // Create a dummy audio context to unlock audio on iOS/Safari
+            var AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (AudioContext) {
+                var audioCtx = new AudioContext();
+                
+                // Fake user interaction as early as possible
+                var silentSound = audioCtx.createOscillator();
+                var silentGain = audioCtx.createGain();
+                silentGain.gain.value = 0.001; // Nearly silent
+                silentSound.connect(silentGain);
+                silentGain.connect(audioCtx.destination);
+                silentSound.start(0);
+                silentSound.stop(0.001);
+                
+                // Resume audiocontext if suspended
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+            }
+            
+            // Simulate user gestures
+            try {
+                ["mousedown", "touchstart", "touchend", "pointerdown", "click", "keydown"].forEach(function(event) {
+                    document.dispatchEvent(new Event(event, {bubbles: true}));
+                });
+            } catch(e) {
+                console.log("Auto-gesture simulation failed:", e);
+            }
+        })();
+    </script>
 </head>
 <body>
     <div class="video-container">
-        <video autoplay muted loop playsinline disablePictureInPicture id="background-video">
+        <!-- Video without muted attribute to allow sound -->
+        <video autoplay loop playsinline disablePictureInPicture id="background-video">
             <source src="meih.mp4" type="video/mp4">
             Your browser does not support the video tag.
         </video>
@@ -32,7 +74,87 @@
             <!-- <h1>Welcome to My Website</h1>
             <p>A fullscreen video background example</p> -->
         </div>
+        <div class="sound-control">
+            <button id="sound-toggle" aria-label="Toggle Sound">
+                <span id="sound-on">🔊</span>
+                <span id="sound-off" class="hidden">🔇</span>
+            </button>
+        </div>
+        <!-- Added overlay element to handle tap events on mobile -->
+        <div id="mobile-overlay"></div>
+        
+        <!-- Hidden audio element to help unlock audio -->
+        <audio id="unlock-audio" preload="auto" loop>
+            <source src="meih.mp4" type="video/mp4">
+        </audio>
     </div>
     <script src="script.js"></script>
+    
+    <!-- Inline script to ensure immediate execution for mobile browsers -->
+    <script>
+        // Force autoplay with sound immediately
+        (function() {
+            var video = document.getElementById('background-video');
+            var unlockAudio = document.getElementById('unlock-audio');
+            
+            // Function to try to force unmute
+            function forceUnmute() {
+                video.muted = false;
+                
+                // Also try playing the helper audio
+                try {
+                    unlockAudio.play();
+                    unlockAudio.muted = false;
+                } catch(e) {}
+                
+                // Force play the video
+                try {
+                    video.play();
+                } catch(e) {
+                    console.log("Immediate autoplay failed:", e);
+                }
+                
+                // Show the correct sound icon
+                document.getElementById('sound-on').classList.remove('hidden');
+                document.getElementById('sound-off').classList.add('hidden');
+            }
+            
+            // Try to force unmute immediately
+            forceUnmute();
+            
+            // Try again after a small delay
+            setTimeout(forceUnmute, 100);
+            setTimeout(forceUnmute, 500);
+            setTimeout(forceUnmute, 1000);
+            
+            // Try on document ready
+            if (document.readyState === 'complete') {
+                forceUnmute();
+            } else {
+                document.addEventListener('DOMContentLoaded', forceUnmute);
+            }
+            
+            // Try on window load
+            window.addEventListener('load', forceUnmute);
+            
+            // Create and trigger fake user interaction events
+            ['mousedown', 'touchend', 'touchstart', 'click'].forEach(function(eventType) {
+                try {
+                    var event = new Event(eventType, {
+                        bubbles: true,
+                        cancelable: true
+                    });
+                    document.dispatchEvent(event);
+                } catch(e) {}
+            });
+            
+            // Older browser support for creating events
+            try {
+                var clickEvent = document.createEvent('MouseEvents');
+                clickEvent.initEvent('click', true, true);
+                document.dispatchEvent(clickEvent);
+            } catch(e) {}
+        })();
+    </script>
 </body>
 </html>
