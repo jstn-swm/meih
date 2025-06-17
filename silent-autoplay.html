@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Audio Unlock</title>
+    <script>
+        // This file helps unlock audio autoplay in the parent document
+        (function() {
+            // Create audio context
+            window.AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (window.AudioContext) {
+                var audioCtx = new AudioContext();
+                
+                // Create and play silent sound
+                var oscillator = audioCtx.createOscillator();
+                var gainNode = audioCtx.createGain();
+                gainNode.gain.value = 0.01; // Nearly silent
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                oscillator.start(0);
+                oscillator.stop(0.5);
+                
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+            }
+            
+            // Simulate user actions
+            function simulateUserActions() {
+                ['mousedown', 'touchstart', 'touchend', 'pointerdown', 'click', 'keydown'].forEach(function(eventName) {
+                    document.dispatchEvent(new Event(eventName, { bubbles: true }));
+                    window.parent.document.dispatchEvent(new Event(eventName, { bubbles: true }));
+                    
+                    if (eventName === 'click') {
+                        var clickEvent = new MouseEvent('click', {
+                            bubbles: true,
+                            cancelable: true,
+                            view: window,
+                            clientX: 10,
+                            clientY: 10
+                        });
+                        document.dispatchEvent(clickEvent);
+                        try {
+                            window.parent.document.dispatchEvent(clickEvent);
+                        } catch(e) {
+                            console.log('Cross-origin dispatch failed:', e);
+                        }
+                    }
+                });
+            }
+            
+            // Try to unlock audio on load
+            simulateUserActions();
+            
+            // Try again after a delay
+            setTimeout(simulateUserActions, 500);
+            setTimeout(simulateUserActions, 1000);
+            
+            // Create and play a silent audio element
+            var audio = new Audio();
+            audio.src = "data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjMyLjEwNAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABIADAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV6urq6urq6urq6urq6urq6urq6urq6urq6v////////////////////////////////8AAAAATGF2YzU4LjU0AAAAAAAAAAAAAAAAJAAAAAAAAAAAASDs90hvAAAAAAAAAAAAAAAA//sQZAAP8AAAaQAAAAgAAA0gAAABAAABpAAAACAAADSAAAAETEFNRTMuMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV";
+            audio.autoplay = true;
+            audio.loop = true;
+            audio.volume = 0.01;
+            audio.play().catch(e => console.log('Silent audio play failed:', e));
+            
+            // Try to signal the parent document
+            try {
+                if (window.parent && window.parent !== window) {
+                    window.parent.postMessage('audioUnlocked', '*');
+                }
+            } catch(e) {
+                console.log('Cross-origin messaging failed:', e);
+            }
+        })();
+    </script>
+</head>
+<body style="background:transparent">
+    <!-- This is a helper iframe used only to help unlock audio autoplay -->
+</body>
+</html>

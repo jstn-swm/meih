@@ -15,42 +15,127 @@ document.addEventListener('DOMContentLoaded', function() {
     setVH();
     window.addEventListener('resize', setVH);
     
-    // By default browsers block autoplay with sound, so we start muted but will try to unmute
-    video.muted = true;
+    // Start with sound enabled
+    video.muted = false;
     
     // Make sure other attributes are set programmatically
     video.autoplay = true;
     video.loop = true;
     video.playsInline = true; // For iOS
-    
-    // Function to play video with sound if possible
-    function playVideoWithSound() {
-        // First try to play with sound
-        video.muted = false;
-        
+    video.volume = 1.0;
+
+    // Play with sound function that tries different approaches
+    function forcePlayWithSound() {
+        // Try Promise-based approach first
         let playPromise = video.play();
+        
         if (playPromise !== undefined) {
             playPromise.then(_ => {
-                // Playback with sound succeeded!
-                soundOn.classList.remove('hidden');
-                soundOff.classList.add('hidden');
+                // Playback started successfully, unmute if needed
+                if (video.muted) {
+                    video.muted = false;
+                    // Update UI
+                    soundOn.classList.remove('hidden');
+                    soundOff.classList.add('hidden');
+                }
                 console.log('Video playing with sound');
-            }).catch(e => {
-                // Autoplay with sound was prevented, try muted
-                console.log('Autoplay with sound failed, trying muted', e);
-                video.muted = true;
-                video.play().then(_ => {
-                    soundOn.classList.add('hidden');
-                    soundOff.classList.remove('hidden');
-                }).catch(e => {
-                    console.log('Even muted autoplay failed:', e);
-                });
+            }).catch(error => {
+                // Auto-play was prevented, try with user gesture emulation
+                console.log('Autoplay with sound prevented:', error);
+                tryWithEmulatedGesture();
             });
+        } else {
+            // Older browsers that don't return promise
+            video.play();
+            video.muted = false;
         }
     }
     
-    // Function to toggle sound
-    function toggleSound() {
+    // Try using simulated user gestures
+    function tryWithEmulatedGesture() {
+        // Create and dispatch various events that might unlock audio
+        const events = ['click', 'touchstart', 'touchend', 'mousedown', 'keydown', 'pointerdown'];
+        const videoEl = document.getElementById('background-video');
+        
+        events.forEach(eventType => {
+            const event = new Event(eventType, { bubbles: true });
+            videoEl.dispatchEvent(event);
+            document.documentElement.dispatchEvent(event);
+            
+            // Also try with MouseEvent for click
+            if (eventType === 'click') {
+                const mouseEvent = new MouseEvent('click', {
+                    view: window,
+                    bubbles: true,
+                    cancelable: true,
+                    clientX: Math.floor(Math.random() * 100),
+                    clientY: Math.floor(Math.random() * 100)
+                });
+                videoEl.dispatchEvent(mouseEvent);
+            }
+        });
+        
+        // Try again to play with sound
+        setTimeout(() => {
+            videoEl.muted = false;
+            videoEl.play().catch(e => console.log('Still failed after gesture emulation:', e));
+        }, 100);
+    }
+    
+    // Use Intersection Observer to detect when video is visible
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                forcePlayWithSound();
+            }
+        });
+    }, { threshold: 0.1 });
+    
+    observer.observe(video);
+    
+    // Try to play immediately
+    forcePlayWithSound();
+    
+    // Try on canplay event
+    video.addEventListener('canplay', forcePlayWithSound);
+    
+    // Try after a small delay
+    setTimeout(forcePlayWithSound, 500);
+    setTimeout(forcePlayWithSound, 1500);
+    setTimeout(forcePlayWithSound, 3000);
+    
+    // Set up audio session for iOS
+    function setupIOSAudio() {
+        // Create an audio context
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
+        
+        const audioCtx = new AudioContext();
+        
+        // Create a silent oscillator
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        gainNode.gain.value = 0.01; // Nearly silent
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        
+        // Play and stop to "unlock" the audio context
+        oscillator.start(0);
+        oscillator.stop(0.5);
+        
+        // Resume the audio context
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+    }
+    
+    // Set up iOS audio
+    setupIOSAudio();
+    
+    // Handle the sound toggle button
+    soundToggle.addEventListener('click', function(e) {
+        e.stopPropagation();
+        
         if (video.muted) {
             video.muted = false;
             soundOn.classList.remove('hidden');
@@ -60,17 +145,6 @@ document.addEventListener('DOMContentLoaded', function() {
             soundOn.classList.add('hidden');
             soundOff.classList.remove('hidden');
         }
-    }
-    
-    // Attempt to play immediately (will likely be muted)
-    video.play().catch(e => console.log('Initial autoplay prevented:', e));
-    
-    // Set up event listeners for user interactions to enable sound
-    
-    // For the sound toggle button
-    soundToggle.addEventListener('click', function(e) {
-        e.stopPropagation();
-        toggleSound();
         
         // Ensure video is playing
         if (video.paused) {
@@ -78,42 +152,14 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // For the mobile overlay
-    mobileOverlay.addEventListener('click', function() {
-        if (video.paused) {
-            playVideoWithSound();
-        } else if (video.muted) {
-            toggleSound();
-        }
-    });
-    
-    // Handle various user interactions to enable sound
-    const userInteractions = ['click', 'touchstart', 'keydown'];
-    userInteractions.forEach(event => {
-        document.addEventListener(event, function interactionHandler() {
-            playVideoWithSound();
-            
-            // Remove these listeners after first interaction to avoid repetitive calls
-            userInteractions.forEach(e => {
-                document.removeEventListener(e, interactionHandler);
-            });
-        }, { once: true });
-    });
-    
-    // If video ends for any reason, restart it
-    video.addEventListener('ended', function() {
-        video.currentTime = 0;
-        video.play();
-    });
-    
     // For iOS wake from sleep/backgrounding
     document.addEventListener('visibilitychange', function() {
         if (document.visibilityState === 'visible') {
-            video.play();
+            forcePlayWithSound();
         }
     });
     
-    // Ensure video always takes up full vertical space, horizontal is automatic
+    // Ensure video always takes up full vertical space
     function resizeVideo() {
         // Always prioritize height to take up full vertical space
         video.style.height = '100%';
@@ -126,4 +172,13 @@ document.addEventListener('DOMContentLoaded', function() {
     
     window.addEventListener('resize', resizeVideo);
     resizeVideo();
+    
+    // Add listener to the whole document for any user interaction
+    document.addEventListener('click', function() {
+        forcePlayWithSound();
+    }, { once: true });
+    
+    document.addEventListener('touchstart', function() {
+        forcePlayWithSound();
+    }, { once: true });
 });
